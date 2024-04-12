@@ -4,22 +4,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.sharp.Clear
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -29,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +44,10 @@ fun QueryPanel(
     onAlbumNameKeywordChange: (String) -> Unit,
     songNameKeyword: String,
     onSongNameKeywordChange: (String) -> Unit,
+    sort: Sort,
     onSortButtonClick: () -> Unit,
+    sortDirection: SortDirection,
+    onSortDirectionButtonClick: () -> Unit,
 ) {
     Surface(
         modifier = modifier,
@@ -58,19 +60,40 @@ fun QueryPanel(
         ) {
             MyTextField("Search Song Name", songNameKeyword, onSongNameKeywordChange)
             MyTextField("Search Album Name", albumNameKeyword, onAlbumNameKeywordChange)
-            ElevatedButton(onClick = onSortButtonClick) {
-                Icon(
-                    modifier = Modifier.size(24.dp),
-                    painter = painterResource(id = R.drawable.ic_sort),
-                    contentDescription = "Sort",
-                    tint = MaterialTheme.colorScheme.primary,
+            Row {
+                MyButton(
+                    onClick = onSortButtonClick,
+                ) {
+                    Icon(
+                        modifier = Modifier.size(24.dp),
+                        painter = painterResource(id = R.drawable.ic_sort),
+                        contentDescription = "Sort",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(width = 8.dp))
+                    Text(
+                        sort.title,
+                        fontFamily = fontFamily,
+                        fontSize = 18.sp,
+                    )
+                }
+                Spacer(
+                    modifier = Modifier.width(8.dp)
                 )
-                Spacer(modifier = Modifier.width(width = 8.dp))
-                Text(
-                    "Sort",
-                    fontFamily = fontFamily,
-                    fontSize = 18.sp,
-                )
+                MyButton(
+                    onClick = onSortDirectionButtonClick,
+                ) {
+                    Icon(
+                        modifier = Modifier.size(24.dp),
+                        painter = painterResource(
+                            when (sortDirection) {
+                                is SortDirection.Ascending -> R.drawable.ic_sort_ascending
+                                is SortDirection.Descending -> R.drawable.ic_sort_descending
+                            },
+                        ),
+                        contentDescription = "Sort Direction",
+                    )
+                }
             }
         }
     }
@@ -78,7 +101,7 @@ fun QueryPanel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyTextField(label: String, value: String, onValueChange: (String) -> Unit) {
+private fun MyTextField(label: String, value: String, onValueChange: (String) -> Unit) {
     TextField(
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label, fontFamily = fontFamily) },
@@ -109,3 +132,9 @@ fun MyTextField(label: String, value: String, onValueChange: (String) -> Unit) {
         }
     )
 }
+
+val Sort.title: String
+    get() = when (this) {
+        Sort.SongName -> "Song Name"
+        Sort.AlbumName -> "Album Name"
+    }
