@@ -99,6 +99,9 @@ class RetrySongListProvider(
 
 // TODO: unit tests
 // TODO: additional features
+// TODO: empty list
+// TODO: test on multiple devices
+// TODO: make a readme file?
 @Suppress("ReplaceGetOrSet")
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
