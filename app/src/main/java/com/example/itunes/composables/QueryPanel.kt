@@ -104,6 +104,7 @@ fun QueryPanel(
 private fun MyTextField(label: String, value: String, onValueChange: (String) -> Unit) {
     TextField(
         modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
         label = { Text(label, fontFamily = fontFamily) },
         value = value,
         onValueChange = onValueChange,

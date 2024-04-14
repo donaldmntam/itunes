@@ -2,6 +2,8 @@
 
 package com.example.itunes
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,8 +18,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.sharp.Refresh
@@ -46,24 +48,24 @@ import com.android.volley.RequestQueue
 import com.android.volley.toolbox.Volley
 import com.example.itunes.composables.BottomShadow
 import com.example.itunes.composables.ErrorDialog
-import com.example.itunes.composables.MyButton
-import com.example.itunes.models.SongListResponse
-import com.example.itunes.services.SongListProvider
-import com.example.itunes.services.SongListProviderImpl
-import com.example.itunes.ui.theme.ItunesTheme
-import com.example.itunes.states.ScreenState
-import com.example.itunes.viewmodels.ScreenViewModel
-import com.example.itunes.viewmodels.ScreenViewModelFactory
-import com.example.itunes.models.Sort
-import com.example.itunes.models.SortDirection
-import com.example.itunes.composables.SongItem
 import com.example.itunes.composables.QueryPanel
+import com.example.itunes.composables.SongItem
 import com.example.itunes.composables.SortDialog
 import com.example.itunes.functions.filter
 import com.example.itunes.functions.sort
 import com.example.itunes.models.DialogModel
+import com.example.itunes.models.SongListResponse
+import com.example.itunes.models.Sort
+import com.example.itunes.models.SortDirection
+import com.example.itunes.services.SongListProvider
+import com.example.itunes.services.SongListProviderImpl
+import com.example.itunes.states.ScreenState
+import com.example.itunes.ui.theme.ItunesTheme
 import com.example.itunes.ui.theme.fontFamily
+import com.example.itunes.viewmodels.ScreenViewModel
+import com.example.itunes.viewmodels.ScreenViewModelFactory
 import kotlinx.coroutines.delay
+
 
 /**
  * This SongListProvider will always fail.
@@ -97,20 +99,31 @@ class RetrySongListProvider(
     }
 }
 
-// TODO: unit tests
-// TODO: additional features
-// TODO: empty list
-// TODO: test on multiple devices
-// TODO: make a readme file?
+/**
+ * This SongListProvider always returns an empty song list.
+ */
+class EmptySongListProvider : SongListProvider {
+    override suspend fun fetch(): Result<SongListResponse> {
+        delay(2000)
+        return Result.success(
+            SongListResponse(
+                resultCount = 0,
+                results = emptyList(),
+            ),
+        )
+    }
+}
+
 @Suppress("ReplaceGetOrSet")
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val queue = Volley.newRequestQueue(this)
-        // NOTE: test loading indicator and network error here
+        // NOTE: test different scenarios with these injected SongListProviders here
         val songListProvider: SongListProvider =
             SongListProviderImpl(queue)
             // AlwaysFailSongListProvider()
             // RetrySongListProvider(queue)
+            // EmptySongListProvider()
 
         val viewModel = ViewModelProvider(this, ScreenViewModelFactory(songListProvider))
             .get(ScreenViewModel::class.java)
@@ -118,15 +131,26 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ItunesTheme(darkTheme = false) {
-                Screen(viewModel)
+                Screen(viewModel, this::copyLink)
             }
         }
     }
+
+    private fun copyLink(link: String) {
+        val clipboard: ClipboardManager = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("iTunes Link", link)
+        clipboard.setPrimaryClip(clip)
+    }
 }
+
+private val contentPadding = 24.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Screen(viewModel: ScreenViewModel) {
+private fun Screen(
+    viewModel: ScreenViewModel,
+    copyLink: (String) -> Unit,
+) {
     var currentDialogModel: DialogModel? by remember { mutableStateOf(null) }
     when(val model = currentDialogModel) {
         null -> Unit
@@ -142,7 +166,9 @@ private fun Screen(viewModel: ScreenViewModel) {
 
     Column {
         CenterAlignedTopAppBar(
-            title = { Text("Swiftie App", fontFamily = fontFamily, fontWeight = FontWeight.Medium) },
+            title = {
+                Text("Swiftie App", fontFamily = fontFamily, fontWeight = FontWeight.Medium)
+            },
             colors = TopAppBarDefaults.smallTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 titleContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -153,19 +179,24 @@ private fun Screen(viewModel: ScreenViewModel) {
             color = MaterialTheme.colorScheme.background,
         ) {
             val state by viewModel.state.collectAsState();
-            Box(contentAlignment = Alignment.Center) {
-                when (val state = state) {
-                    is ScreenState.Loading -> LoadingContent()
-                    is ScreenState.Ready -> ReadyContent(
-                        state = state,
-                        showSortDialog = { dialog -> currentDialogModel = dialog },
-                    )
-                    is ScreenState.Error -> ErrorContent(
-                        state = state,
-                        reload = viewModel::reload,
-                        showErrorDialog = { dialog -> currentDialogModel = dialog },
-                    )
+            when (val state = state) {
+                is ScreenState.Loading -> LoadingContent()
+                is ScreenState.Ready -> {
+                    if (state.songs.isEmpty()) {
+                        EmptyContent()
+                    } else {
+                        ReadyContent(
+                            state = state,
+                            showSortDialog = { dialog -> currentDialogModel = dialog },
+                            copyLink = copyLink,
+                        )
+                    }
                 }
+                is ScreenState.Error -> ErrorContent(
+                    state = state,
+                    reload = viewModel::reload,
+                    showErrorDialog = { dialog -> currentDialogModel = dialog },
+                )
             }
         }
     }
@@ -173,11 +204,27 @@ private fun Screen(viewModel: ScreenViewModel) {
 
 @Composable
 private fun LoadingContent() {
-    CircularProgressIndicator(
-        modifier = Modifier
-            .width(48.dp)
-            .height(48.dp)
-    )
+    Box {
+        CircularProgressIndicator(
+            modifier = Modifier
+                .size(48.dp)
+                .align(Alignment.Center)
+        )
+    }
+}
+
+@Composable
+private fun EmptyContent() {
+    Box(
+        modifier = Modifier.padding(contentPadding),
+    ) {
+        Text(
+            modifier = Modifier.align(Alignment.Center),
+            text = "Looks like Taylor Swift got banned from iTunes because the fetched song list is empty!",
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+    }
 }
 
 @Composable
@@ -185,11 +232,24 @@ private fun ReadyContent(
     modifier: Modifier = Modifier,
     state: ScreenState.Ready,
     showSortDialog: (DialogModel.Sort) -> Unit,
+    copyLink: (String) -> Unit,
 ) {
+    require(state.songs.isNotEmpty()) { "Song list is unexpectedly empty!" }
+
     var songNameKeyword by remember { mutableStateOf("") }
     var albumNameKeyword by remember { mutableStateOf("") }
     var sort: Sort by remember { mutableStateOf(Sort.SongName) }
     var sortDirection: SortDirection by remember { mutableStateOf(SortDirection.Ascending) }
+
+    val displayedSongs = state.songs
+        .filter(
+            songNameKeyword = songNameKeyword,
+            albumNameKeyword = albumNameKeyword,
+        )
+        .sort(
+            sort = sort,
+            sortDirection = sortDirection,
+        )
 
     Column(
         modifier = modifier
@@ -217,33 +277,44 @@ private fun ReadyContent(
                 .weight(weight = 1F, fill = true),
         ) {
             Surface(
+                modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background,
             ) {
-                LazyColumn(
-                    contentPadding = PaddingValues(all = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
-                ) {
-                    val displayedSongs = state.songs
-                        .filter(
-                            songNameKeyword = songNameKeyword,
-                            albumNameKeyword = albumNameKeyword,
+                if (displayedSongs.isEmpty()) {
+                    Box(
+                        modifier = Modifier.padding(contentPadding),
+                    ) {
+                        Text(
+                            modifier = Modifier.align(Alignment.Center),
+                            text = emptySearchMessage(
+                                songNameKeyword = songNameKeyword,
+                                albumNameKeyword = albumNameKeyword,
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
                         )
-                        .sort(
-                            sort = sort,
-                            sortDirection = sortDirection,
-                        )
-                    for (song in displayedSongs) {
-                        item {
-                            SongItem(song = song)
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(all = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        for (song in displayedSongs) {
+                            item {
+                                SongItem(
+                                    modifier = Modifier.clickable { copyLink(song.trackViewUrl) },
+                                    song = song,
+                                )
+                            }
                         }
                     }
                 }
-                BottomShadow(
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    height = 4.dp,
-                    alpha = 0.1F,
-                )
             }
+            BottomShadow(
+                modifier = Modifier.align(Alignment.TopCenter),
+                height = 4.dp,
+                alpha = 0.1F,
+            )
         }
     }
 }
@@ -256,9 +327,7 @@ private fun ErrorContent(
     showErrorDialog: (DialogModel.Error) -> Unit,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth(fraction = 0.8F)
-            .fillMaxHeight(fraction = 0.8F),
+        modifier = modifier.padding(contentPadding),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -292,4 +361,17 @@ private fun ErrorContent(
             tint = MaterialTheme.colorScheme.primary,
         )
     }
+}
+
+fun emptySearchMessage(
+    songNameKeyword: String,
+    albumNameKeyword: String,
+): String {
+    if (songNameKeyword.isNotEmpty() && albumNameKeyword.isNotEmpty()) {
+        return "No songs found with song name \"$songNameKeyword\" and album name \"$albumNameKeyword\""
+    }
+    if (albumNameKeyword.isNotEmpty()) {
+        return "No songs found with album name \"$albumNameKeyword\""
+    }
+    return "No songs found with song name \"$songNameKeyword\""
 }

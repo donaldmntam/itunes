@@ -20,9 +20,7 @@ class ScreenViewModel(
     val state: StateFlow<ScreenState> = _state.asStateFlow()
 
     init {
-        Log.d("donald", "init inside screen view model here")
         viewModelScope.launch {
-            Log.d("donald", "fetching song list here")
             val result = songListProvider.fetch()
             result
                 .onSuccess(::didFetchSongList)
@@ -51,7 +49,6 @@ class ScreenViewModel(
     }
 
     private fun didReceivedError(error: Any) {
-        Log.d("donald", "did receive error here donald")
         val current = _state.value
         if (current !is ScreenState.Loading) return
         viewModelScope.launch {
